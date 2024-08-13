@@ -226,7 +226,7 @@ std::vector<char> get_file_byte_array(const std::string& path_to_file) {
   rewind(fd); // seek back to beginning of file
   std::vector<char> raw_data_from_file;
   raw_data_from_file.resize(size_of_file);
-  fread(raw_data_from_file.data(), sizeof(char), size_of_file, fd);
+  size_t flag = fread(raw_data_from_file.data(), sizeof(char), size_of_file, fd);
 
   // std::cout <<  << std::endl;
   return raw_data_from_file;
