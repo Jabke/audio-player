@@ -5,7 +5,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <cstdlib>
-
+#include <memory>
+#include <spdlog/spdlog.h>
 /*
  * Тип данных показывающий ошибки
  */
@@ -21,12 +22,18 @@ enum class PulseErrors {
 
 PulseErrors error = PulseErrors::kNoError;
 
+/***********************************************************************************************************************
+ * Глобальные переменные
+ ***********************************************************************************************************************/
+
 /*
  * Глобальный цикл, связывающийся с сервером pulseaudio
  */
  pa_threaded_mainloop* mainloop;
 
-//----------------------------------------------------------------------------------------------------------------------
+/***********************************************************************************************************************
+ * Коллбэки
+ ***********************************************************************************************************************/
 
 /*
  * Коллбэк для изменения состояния контекста(его подключения)
@@ -64,7 +71,20 @@ void on_io_complete(pa_stream *s, size_t nbytes, void *udata)
   std::cout << "Audiobuffer" << std::endl;
 }
 
-//----------------------------------------------------------------------------------------------------------------------
+/*
+ * Коллбэк оповещения о том что буффер опустошён
+ */
+
+void on_op_complete(pa_stream *s, int success, void *udata)
+{
+  pa_threaded_mainloop_signal(mainloop, 0);
+}
+
+
+/***********************************************************************************************************************
+ * Определения функций
+ ***********************************************************************************************************************/
+
 /*
  * Создает контекст для связи с аудио сервером pulseaudio
  */
@@ -103,7 +123,8 @@ pa_context* create_client_context() {
   pa_threaded_mainloop_start(mainloop);
 
   pa_threaded_mainloop_lock(mainloop);
-  for (;;) {
+
+  while (true) {
     // Check the current state of the ongoing connection
     int r = pa_context_get_state(context);
     if (r == PA_CONTEXT_READY) {
@@ -179,12 +200,13 @@ pa_stream* create_audiobuffer_playback(pa_context* context, const char *device_i
    * Число 16 - говорит о 16-битном звуке, то есть одна точка представляет собой число от 0 до 65535. Таким образом получается
    * количество байт, которые занимает точка снятая с аналогового сигнала. И наконец полученное значение умножается на
    * максимальный размер музыкального отрезка в секундах, который может содержаться в буффере. На выходе получается
-   * размер буффера в байтах.
+   * размер буффера в байтах. Деление на 8 происходит потому что в байте 8 бит
    */
   attr.tlength = spec.rate * 16/8 * spec.channels * buffer_length_msec / 1000;
+  spdlog::info("Size of buffer {} bytes", attr.tlength);
   void *udata = NULL;
   pa_stream_set_write_callback(stm, on_io_complete, udata);
-  pa_stream_connect_playback(stm, device_id, &attr, static_cast<pa_stream_flags_t>(0), NULL, NULL);
+  pa_stream_connect_playback(stm, NULL, &attr, static_cast<pa_stream_flags_t>(0), NULL, NULL);
   for (;;) {
     int r = pa_stream_get_state(stm);
     if (r == PA_STREAM_READY)
@@ -226,7 +248,7 @@ std::vector<char> get_file_byte_array(const std::string& path_to_file) {
   rewind(fd); // seek back to beginning of file
   std::vector<char> raw_data_from_file;
   raw_data_from_file.resize(size_of_file);
-  size_t flag = fread(raw_data_from_file.data(), sizeof(char), size_of_file, fd);
+  fread(raw_data_from_file.data(), sizeof(char), size_of_file, fd);
 
   // std::cout <<  << std::endl;
   return raw_data_from_file;
@@ -242,6 +264,9 @@ void delete_audiobuffer(pa_stream* stream) {
 }
 //----------------------------------------------------------------------------------------------------------------------
 
+
+
+//----------------------------------------------------------------------------------------------------------------------
 /*
  * По сути очищает память просто и всё
  */
@@ -258,7 +283,8 @@ void delete_client_context(pa_context* context) {
 
 
 int main() {
-  std::cout << "1" << std::endl;
+  spdlog::info("Welcome to spdlog!");
+  spdlog::error("Some error message with arg: {}", 1);
   pa_context* client_context = create_client_context();
   std::vector<std::string> devices;
   get_available_sinks(client_context, &devices);
@@ -268,8 +294,35 @@ int main() {
 
   pa_stream* audiobuffer_playback = create_audiobuffer_playback(client_context, devices[1].c_str());
 
-  std::vector<char> audiofile = get_file_byte_array("/home/galkin/Рабочий стол/Projects/audio_palyer/audio/sample-12s.wav");
+  std::vector<char> audiofile = get_file_byte_array("/home/galkin/projects/audio-player/audio/sample-12s.wav");
   std::cout << "Size of file: " << audiofile.size() << std::endl;
+  void* data = audiofile.data();
+  size_t nbytes = -1;
+///////////////////////////////////////
+  pa_threaded_mainloop_lock(mainloop);
+/*
+  spdlog::info("Data pointer - {}", data);
+  pa_stream_begin_write(audiobuffer_playback, &data, &nbytes);
+  spdlog::info("Maximum available buffer size - {}", nbytes);
+  spdlog::info("Data pointer - {}", data);
+
+  pa_stream_write(audiobuffer_playback, data, nbytes, NULL, 0, PA_SEEK_RELATIVE);*/
+
+  for (;;) {
+    size_t n = pa_stream_writable_size(audiobuffer_playback);
+    void *buf;
+    pa_stream_begin_write(audiobuffer_playback, &buf, &n);
+    if (n == 0) {
+      pa_threaded_mainloop_wait(mainloop);
+      continue;
+    } else {
+      pa_stream_write(audiobuffer_playback, buf, n, NULL, 0, PA_SEEK_RELATIVE);
+    }
+  }
+
+
+  pa_threaded_mainloop_unlock(mainloop);
+  ///////////////////////////////////////
   delete_audiobuffer(audiobuffer_playback);
   delete_client_context(client_context);
   std::cout << "2" << std::endl;
