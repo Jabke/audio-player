@@ -16,6 +16,4 @@ find_package(spdlog REQUIRED)
 set(SOURCES src/audio_player/audio_player.hpp)
 
 add_executable(audio_palyer ${SOURCES} main.cpp)
-add_executable(test test.cpp)
 target_link_libraries(audio_palyer pulse-simple pulse spdlog::spdlog)
-target_link_libraries(test pulse-simple pulse)
