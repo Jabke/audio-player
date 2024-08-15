@@ -1,5 +1,6 @@
 [requires]
 spdlog/1.14.1
+fmt/10.2.1
 
 [generators]
 CMakeDeps

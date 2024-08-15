@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <memory>
 #include <spdlog/spdlog.h>
+#include "src/pulse_client/pulse_client.hpp"
 /*
  * Тип данных показывающий ошибки
  */
@@ -103,7 +104,6 @@ pa_context* create_client_context() {
     return NULL;
   }
 
-  //TODO возможно тут и далее возникает утечка памяти, так как созданный ранее api не удаляется
   pa_context* context = pa_context_new_with_proplist(mainloop_api, "audio_client", NULL);
   if (context == NULL) {
     pa_threaded_mainloop_free(mainloop);
@@ -285,7 +285,15 @@ void delete_client_context(pa_context* context) {
 int main() {
   spdlog::info("Welcome to spdlog!");
   spdlog::error("Some error message with arg: {}", 1);
-  pa_context* client_context = create_client_context();
+  pulse_client::PAThreadedMainLoop ml;
+  pa_threaded_mainloop_start(ml.GetRawPointer());
+  std::string data = "jkl";
+  pulse_client::PAContext pa_context_1(ml, data);
+  pa_context_1.SynchroningConnect();
+
+
+
+  /*pa_context* client_context = create_client_context();
   std::vector<std::string> devices;
   get_available_sinks(client_context, &devices);
 
@@ -299,7 +307,7 @@ int main() {
   void* data = audiofile.data();
   size_t nbytes = -1;
 ///////////////////////////////////////
-  pa_threaded_mainloop_lock(mainloop);
+  pa_threaded_mainloop_lock(mainloop);*/
 /*
   spdlog::info("Data pointer - {}", data);
   pa_stream_begin_write(audiobuffer_playback, &data, &nbytes);
@@ -308,7 +316,7 @@ int main() {
 
   pa_stream_write(audiobuffer_playback, data, nbytes, NULL, 0, PA_SEEK_RELATIVE);*/
 
-  for (;;) {
+  /*for (;;) {
     size_t n = pa_stream_writable_size(audiobuffer_playback);
     void *buf;
     pa_stream_begin_write(audiobuffer_playback, &buf, &n);
@@ -325,6 +333,6 @@ int main() {
   ///////////////////////////////////////
   delete_audiobuffer(audiobuffer_playback);
   delete_client_context(client_context);
-  std::cout << "2" << std::endl;
+  std::cout << "2" << std::endl;*/
   return 0;
 }
